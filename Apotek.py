@@ -1,6 +1,7 @@
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
+from datetime import datetime
 
 # Membuat/terhubung ke database
 conn = sqlite3.connect('apotek.db')
@@ -72,6 +73,21 @@ def melayani_pembeli():
         label_total.config(text=f"Total: Rp {total:,.2f}")
         return total
     
+    def cetak_struk(total):
+        # Membuat isi struk
+        waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        struk = f"*** Alif Farma ***\n"
+        struk += f"Tanggal: {waktu}\n"
+        struk += "=" * 30 + "\n"
+        struk += "{:<20}{:<5}{:<10}\n".format("Nama Obat", "Qty", "Subtotal")
+        for obat_id, nama, jumlah, harga, subtotal in keranjang:
+            struk += f"{nama:<20}{jumlah:<5}Rp{subtotal:,.2f}\n"
+        struk += "=" * 30 + "\n"
+        struk += f"Total: Rp {total:,.2f}\n"
+        struk += "=" * 30 + "\n"
+        struk += "Terima kasih telah berbelanja!"
+        messagebox.showinfo("Struk Transaksi", struk)
+    
     def selesaikan_transaksi():
         if not keranjang:
             messagebox.showerror("Error", "Keranjang kosong!")
@@ -87,13 +103,13 @@ def melayani_pembeli():
             cursor.execute("UPDATE obat SET stok = stok - ? WHERE id = ?", (jumlah, obat_id))
         
         conn.commit()
-        messagebox.showinfo("Sukses", f"Transaksi selesai! Total: Rp {total:,.2f}")
+        cetak_struk(total)
         keranjang.clear()
         update_keranjang()
 
     # Membuat window untuk melayani pembeli
     window = tk.Toplevel(root)
-    window.title("Layanan Pembeli")
+    window.title("Layanan Pembeli - Alif Farma")
     
     tk.Label(window, text="ID Obat:").grid(row=0, column=0, padx=5, pady=5)
     entry_id_obat = tk.Entry(window)
@@ -122,6 +138,7 @@ def melayani_pembeli():
 
 # Fungsi untuk menampilkan menu utama
 def menu_utama():
+    tk.Label(root, text="Sistem Penjualan Apotek - Alif Farma", font=("Arial", 16)).pack(pady=10)
     btn_pembeli = tk.Button(root, text="Layani Pembeli", command=melayani_pembeli)
     btn_pembeli.pack(pady=10)
     
@@ -131,8 +148,9 @@ def menu_utama():
 # Inisialisasi Tkinter dan keranjang
 create_tables()
 root = tk.Tk()
-root.title("Sistem Penjualan Apotek")
+root.title("Sistem Penjualan Apotek - Alif Farma")
 keranjang = []
 
 menu_utama()
 root.mainloop()
+                
