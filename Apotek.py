@@ -1,5 +1,6 @@
 import sqlite3
-from datetime import datetime
+import tkinter as tk
+from tkinter import ttk, messagebox
 
 # Membuat/terhubung ke database
 conn = sqlite3.connect('apotek.db')
@@ -36,98 +37,102 @@ def create_tables():
     ''')
     conn.commit()
 
-# Fungsi untuk menambahkan obat baru
-def tambah_obat():
-    nama = input("Masukkan nama obat: ")
-    kategori = input("Masukkan kategori obat: ")
-    harga = float(input("Masukkan harga obat: "))
-    stok = int(input("Masukkan stok obat: "))
-    cursor.execute("INSERT INTO obat (nama, kategori, harga, stok) VALUES (?, ?, ?, ?)", (nama, kategori, harga, stok))
-    conn.commit()
-    print("Obat berhasil ditambahkan!")
-
-# Fungsi untuk menampilkan daftar obat
-def tampilkan_obat():
-    cursor.execute("SELECT * FROM obat")
-    hasil = cursor.fetchall()
-    print("Daftar Obat:")
-    print("{:<5} {:<20} {:<15} {:<10} {:<5}".format("ID", "Nama", "Kategori", "Harga", "Stok"))
-    for row in hasil:
-        print("{:<5} {:<20} {:<15} {:<10} {:<5}".format(row[0], row[1], row[2], row[3], row[4]))
-
-# Fungsi untuk melakukan transaksi
-def transaksi_penjualan():
-    tampilkan_obat()
-    id_transaksi = []
-    total_harga = 0
-
-    while True:
-        obat_id = int(input("Masukkan ID obat (0 untuk selesai): "))
-        if obat_id == 0:
-            break
-        jumlah = int(input("Masukkan jumlah: "))
-        cursor.execute("SELECT nama, harga, stok FROM obat WHERE id = ?", (obat_id,))
-        obat = cursor.fetchone()
-
-        if obat:
-            nama, harga, stok = obat
-            if jumlah > stok:
-                print(f"Stok tidak mencukupi untuk {nama}.")
+# Fungsi untuk melayani pembeli
+def melayani_pembeli():
+    def tambah_obat_ke_keranjang():
+        try:
+            obat_id = int(entry_id_obat.get())
+            jumlah = int(entry_jumlah.get())
+            
+            cursor.execute("SELECT nama, harga, stok FROM obat WHERE id = ?", (obat_id,))
+            obat = cursor.fetchone()
+            
+            if obat:
+                nama, harga, stok = obat
+                if jumlah > stok:
+                    messagebox.showerror("Error", f"Stok {nama} tidak mencukupi!")
+                else:
+                    subtotal = jumlah * harga
+                    keranjang.append((obat_id, nama, jumlah, harga, subtotal))
+                    update_keranjang()
             else:
-                subtotal = jumlah * harga
-                total_harga += subtotal
-                id_transaksi.append((obat_id, jumlah, subtotal))
-                cursor.execute("UPDATE obat SET stok = stok - ? WHERE id = ?", (jumlah, obat_id))
-                print(f"Menambahkan {jumlah} x {nama} ke transaksi. Subtotal: {subtotal}")
-        else:
-            print("ID obat tidak ditemukan.")
-
-    if id_transaksi:
-        cursor.execute("INSERT INTO transaksi (tanggal, total) VALUES (?, ?)", (datetime.now(), total_harga))
+                messagebox.showerror("Error", "ID obat tidak ditemukan!")
+        except ValueError:
+            messagebox.showerror("Error", "Masukkan data yang valid!")
+    
+    def update_keranjang():
+        for item in tree_keranjang.get_children():
+            tree_keranjang.delete(item)
+        
+        total = 0
+        for idx, (obat_id, nama, jumlah, harga, subtotal) in enumerate(keranjang, start=1):
+            total += subtotal
+            tree_keranjang.insert('', 'end', values=(idx, nama, jumlah, harga, subtotal))
+        
+        label_total.config(text=f"Total: Rp {total:,.2f}")
+        return total
+    
+    def selesaikan_transaksi():
+        if not keranjang:
+            messagebox.showerror("Error", "Keranjang kosong!")
+            return
+        
+        total = update_keranjang()
+        cursor.execute("INSERT INTO transaksi (tanggal, total) VALUES (datetime('now'), ?)", (total,))
         transaksi_id = cursor.lastrowid
-
-        for item in id_transaksi:
-            obat_id, jumlah, subtotal = item
+        
+        for obat_id, nama, jumlah, harga, subtotal in keranjang:
             cursor.execute("INSERT INTO transaksi_detail (transaksi_id, obat_id, jumlah, subtotal) VALUES (?, ?, ?, ?)",
                            (transaksi_id, obat_id, jumlah, subtotal))
+            cursor.execute("UPDATE obat SET stok = stok - ? WHERE id = ?", (jumlah, obat_id))
+        
         conn.commit()
-        print(f"Transaksi selesai. Total yang harus dibayar: {total_harga}")
+        messagebox.showinfo("Sukses", f"Transaksi selesai! Total: Rp {total:,.2f}")
+        keranjang.clear()
+        update_keranjang()
 
-# Fungsi untuk melihat riwayat transaksi
-def riwayat_transaksi():
-    cursor.execute("SELECT * FROM transaksi")
-    hasil = cursor.fetchall()
-    print("Riwayat Transaksi:")
-    print("{:<5} {:<20} {:<10}".format("ID", "Tanggal", "Total"))
-    for row in hasil:
-        print("{:<5} {:<20} {:<10}".format(row[0], row[1], row[2]))
+    # Membuat window untuk melayani pembeli
+    window = tk.Toplevel(root)
+    window.title("Layanan Pembeli")
+    
+    tk.Label(window, text="ID Obat:").grid(row=0, column=0, padx=5, pady=5)
+    entry_id_obat = tk.Entry(window)
+    entry_id_obat.grid(row=0, column=1, padx=5, pady=5)
+    
+    tk.Label(window, text="Jumlah:").grid(row=1, column=0, padx=5, pady=5)
+    entry_jumlah = tk.Entry(window)
+    entry_jumlah.grid(row=1, column=1, padx=5, pady=5)
+    
+    btn_tambah = tk.Button(window, text="Tambah ke Keranjang", command=tambah_obat_ke_keranjang)
+    btn_tambah.grid(row=2, column=0, columnspan=2, pady=5)
+    
+    tree_keranjang = ttk.Treeview(window, columns=("No", "Nama Obat", "Jumlah", "Harga", "Subtotal"), show='headings')
+    tree_keranjang.heading("No", text="No")
+    tree_keranjang.heading("Nama Obat", text="Nama Obat")
+    tree_keranjang.heading("Jumlah", text="Jumlah")
+    tree_keranjang.heading("Harga", text="Harga")
+    tree_keranjang.heading("Subtotal", text="Subtotal")
+    tree_keranjang.grid(row=3, column=0, columnspan=2, pady=5)
+    
+    label_total = tk.Label(window, text="Total: Rp 0.00")
+    label_total.grid(row=4, column=0, columnspan=2, pady=5)
+    
+    btn_selesai = tk.Button(window, text="Selesaikan Transaksi", command=selesaikan_transaksi)
+    btn_selesai.grid(row=5, column=0, columnspan=2, pady=5)
 
-# Menu utama
-def menu():
-    while True:
-        print("\n=== Sistem Penjualan Apotek ===")
-        print("1. Tambah Obat")
-        print("2. Tampilkan Obat")
-        print("3. Transaksi Penjualan")
-        print("4. Riwayat Transaksi")
-        print("5. Keluar")
-        pilihan = input("Pilih menu: ")
+# Fungsi untuk menampilkan menu utama
+def menu_utama():
+    btn_pembeli = tk.Button(root, text="Layani Pembeli", command=melayani_pembeli)
+    btn_pembeli.pack(pady=10)
+    
+    btn_keluar = tk.Button(root, text="Keluar", command=root.destroy)
+    btn_keluar.pack(pady=10)
 
-        if pilihan == '1':
-            tambah_obat()
-        elif pilihan == '2':
-            tampilkan_obat()
-        elif pilihan == '3':
-            transaksi_penjualan()
-        elif pilihan == '4':
-            riwayat_transaksi()
-        elif pilihan == '5':
-            print("Keluar dari program.")
-            break
-        else:
-            print("Pilihan tidak valid!")
+# Inisialisasi Tkinter dan keranjang
+create_tables()
+root = tk.Tk()
+root.title("Sistem Penjualan Apotek")
+keranjang = []
 
-# Menjalankan program
-if __name__ == "__main__":
-    create_tables()
-    menu()
+menu_utama()
+root.mainloop()
