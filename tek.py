@@ -36,18 +36,40 @@ def create_tables():
     ''')
     conn.commit()
 
-# Fungsi untuk melayani pembeli
+# Fungsi untuk merekomendasikan obat berdasarkan keluhan
+def rekomendasi_keluhan(keluhan):
+    keluhan = keluhan.lower()
+
+    # Daftar kata kunci dan rekomendasi obat
+    rekomendasi = {
+        'sakit kepala': "Paracetamol - Rp 5,000",
+        'batuk': "Sirup Batuk ABC - Rp 12,000",
+        'demam': "Ibuprofen - Rp 10,000",
+        'flu': "Obat Flu XYZ - Rp 15,000",
+        'nyeri': "Aspirin - Rp 7,500",
+        'perut': "Antasida - Rp 8,000",
+    }
+
+    # Menentukan rekomendasi berdasarkan keluhan
+    for keluhan_kata in rekomendasi:
+        if keluhan_kata in keluhan:
+            return rekomendasi[keluhan_kata]
+
+    return "Maaf, kami tidak memiliki obat yang sesuai dengan keluhan Anda."
+
+# Fungsi untuk melayani pembeli dengan chat responsif
 def melayani_pembeli():
     keranjang = []
     
+    print("\n*** Alif Farma - Layanan Pembeli ***")
+    
     while True:
-        # Tampilkan menu
-        print("\n*** Alif Farma - Layanan Pembeli ***")
-        print("1. Tambah Obat ke Keranjang")
+        print("\n1. Tambah Obat ke Keranjang")
         print("2. Selesaikan Transaksi")
-        print("3. Keluar")
+        print("3. Chat Responsif (Keluhan)")
+        print("4. Keluar")
         
-        pilihan = input("Pilih menu (1/2/3): ")
+        pilihan = input("Pilih menu (1/2/3/4): ")
         
         if pilihan == "1":
             try:
@@ -102,6 +124,11 @@ def melayani_pembeli():
                 keranjang.clear()
 
         elif pilihan == "3":
+            keluhan = input("Masukkan keluhan Anda: ")
+            rekomendasi = rekomendasi_keluhan(keluhan)
+            print(f"Sistem: {rekomendasi}")
+        
+        elif pilihan == "4":
             print("Terima kasih telah menggunakan layanan kami.")
             break
         
@@ -114,3 +141,4 @@ melayani_pembeli()
 
 # Menutup koneksi ke database setelah program selesai
 conn.close()
+    
