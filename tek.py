@@ -1,144 +1,168 @@
-import sqlite3
+import json
 from datetime import datetime
 
-# Membuat/terhubung ke database
-conn = sqlite3.connect('apotek.db')
-cursor = conn.cursor()
+# Nama file JSON untuk menyimpan data transaksi
+FILE_TRANSAKSI = "transaksi.json"
 
-# Membuat tabel jika belum ada
-def create_tables():
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS obat (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nama TEXT NOT NULL,
-        kategori TEXT NOT NULL,
-        harga REAL NOT NULL,
-        stok INTEGER NOT NULL
-    )
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS transaksi (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tanggal TEXT NOT NULL,
-        total REAL NOT NULL
-    )
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS transaksi_detail (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        transaksi_id INTEGER NOT NULL,
-        obat_id INTEGER NOT NULL,
-        jumlah INTEGER NOT NULL,
-        subtotal REAL NOT NULL,
-        FOREIGN KEY(transaksi_id) REFERENCES transaksi(id),
-        FOREIGN KEY(obat_id) REFERENCES obat(id)
-    )
-    ''')
-    conn.commit()
+# Fungsi untuk membuat atau membaca file transaksi JSON
+def baca_file_transaksi():
+    try:
+        with open(FILE_TRANSAKSI, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        # Jika file tidak ada, buat file kosong
+        return {}
 
-# Fungsi untuk merekomendasikan obat berdasarkan keluhan
-def rekomendasi_keluhan(keluhan):
-    keluhan = keluhan.lower()
+def simpan_file_transaksi(data):
+    with open(FILE_TRANSAKSI, "w") as file:
+        json.dump(data, file, indent=4)
 
-    # Daftar kata kunci dan rekomendasi obat
-    rekomendasi = {
-        'sakit kepala': "Paracetamol - Rp 5,000",
-        'batuk': "Sirup Batuk ABC - Rp 12,000",
-        'demam': "Ibuprofen - Rp 10,000",
-        'flu': "Obat Flu XYZ - Rp 15,000",
-        'nyeri': "Aspirin - Rp 7,500",
-        'perut': "Antasida - Rp 8,000",
+# Fungsi untuk menambahkan obat baru (hanya untuk admin)
+def tambah_obat(obat_db):
+    nama = input("Masukkan nama obat: ")
+    kategori = input("Masukkan kategori obat: ")
+    harga = float(input("Masukkan harga obat: "))
+    stok = int(input("Masukkan stok obat: "))
+    id_obat = len(obat_db) + 1
+    obat_db[id_obat] = {
+        "nama": nama,
+        "kategori": kategori,
+        "harga": harga,
+        "stok": stok
     }
+    print("Obat berhasil ditambahkan!")
+    return obat_db
 
-    # Menentukan rekomendasi berdasarkan keluhan
-    for keluhan_kata in rekomendasi:
-        if keluhan_kata in keluhan:
-            return rekomendasi[keluhan_kata]
+# Fungsi untuk menampilkan daftar obat
+def tampilkan_obat(obat_db):
+    print("\nDaftar Obat:")
+    print("{:<5} {:<20} {:<15} {:<10} {:<5}".format("ID", "Nama", "Kategori", "Harga", "Stok"))
+    for id_obat, detail in obat_db.items():
+        print("{:<5} {:<20} {:<15} {:<10} {:<5}".format(
+            id_obat, detail['nama'], detail['kategori'], detail['harga'], detail['stok']
+        ))
 
-    return "Maaf, kami tidak memiliki obat yang sesuai dengan keluhan Anda."
+# Fungsi transaksi untuk user
+def transaksi_penjualan(obat_db):
+    transaksi_data = baca_file_transaksi()
+    pembeli_id = len(transaksi_data) + 1
+    transaksi_data[pembeli_id] = {
+        "tanggal": str(datetime.now()),
+        "items": [],
+        "total": 0,
+        "uang_dibayar": 0,
+        "kembalian": 0
+    }
+    total_harga = 0
 
-# Fungsi untuk melayani pembeli dengan chat responsif
-def melayani_pembeli():
-    keranjang = []
-    
-    print("\n*** Alif Farma - Layanan Pembeli ***")
-    
+    print("\n=== Transaksi Penjualan ===")
+    tampilkan_obat(obat_db)
+
     while True:
-        print("\n1. Tambah Obat ke Keranjang")
-        print("2. Selesaikan Transaksi")
-        print("3. Chat Responsif (Keluhan)")
-        print("4. Keluar")
-        
-        pilihan = input("Pilih menu (1/2/3/4): ")
-        
-        if pilihan == "1":
-            try:
-                obat_id = int(input("Masukkan ID Obat: "))
-                jumlah = int(input("Masukkan Jumlah Obat: "))
-                
-                cursor.execute("SELECT nama, harga, stok FROM obat WHERE id = ?", (obat_id,))
-                obat = cursor.fetchone()
-                
-                if obat:
-                    nama, harga, stok = obat
-                    if jumlah > stok:
-                        print(f"Stok {nama} tidak mencukupi!")
-                    else:
-                        subtotal = jumlah * harga
-                        keranjang.append((obat_id, nama, jumlah, harga, subtotal))
-                        print(f"{nama} ditambahkan ke keranjang.")
-                else:
-                    print("ID obat tidak ditemukan!")
-            except ValueError:
-                print("Input tidak valid!")
-        
-        elif pilihan == "2":
-            if not keranjang:
-                print("Keranjang kosong!")
-            else:
-                total = sum(subtotal for _, _, _, _, subtotal in keranjang)
-                cursor.execute("INSERT INTO transaksi (tanggal, total) VALUES (?, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), total))
-                transaksi_id = cursor.lastrowid
-                
-                for obat_id, nama, jumlah, harga, subtotal in keranjang:
-                    cursor.execute("INSERT INTO transaksi_detail (transaksi_id, obat_id, jumlah, subtotal) VALUES (?, ?, ?, ?)",
-                                   (transaksi_id, obat_id, jumlah, subtotal))
-                    cursor.execute("UPDATE obat SET stok = stok - ? WHERE id = ?", (jumlah, obat_id))
-                
-                conn.commit()
-
-                # Cetak struk
-                waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                print("\n*** Alif Farma ***")
-                print(f"Tanggal: {waktu}")
-                print("=" * 30)
-                print("{:<20}{:<5}{:<10}".format("Nama Obat", "Qty", "Subtotal"))
-                for obat_id, nama, jumlah, harga, subtotal in keranjang:
-                    print(f"{nama:<20}{jumlah:<5}Rp{subtotal:,.2f}")
-                print("=" * 30)
-                print(f"Total: Rp {total:,.2f}")
-                print("=" * 30)
-                print("Terima kasih telah berbelanja!")
-                
-                # Kosongkan keranjang setelah transaksi selesai
-                keranjang.clear()
-
-        elif pilihan == "3":
-            keluhan = input("Masukkan keluhan Anda: ")
-            rekomendasi = rekomendasi_keluhan(keluhan)
-            print(f"Sistem: {rekomendasi}")
-        
-        elif pilihan == "4":
-            print("Terima kasih telah menggunakan layanan kami.")
+        obat_id = int(input("Masukkan ID obat (0 untuk selesai): "))
+        if obat_id == 0:
             break
-        
+
+        if obat_id not in obat_db:
+            print("ID obat tidak ditemukan.")
+            continue
+
+        jumlah = int(input(f"Masukkan jumlah untuk {obat_db[obat_id]['nama']}: "))
+        if jumlah > obat_db[obat_id]['stok']:
+            print(f"Stok tidak mencukupi untuk {obat_db[obat_id]['nama']}.")
+            continue
+
+        subtotal = jumlah * obat_db[obat_id]['harga']
+        total_harga += subtotal
+
+        # Update stok obat
+        obat_db[obat_id]['stok'] -= jumlah
+
+        # Tambahkan item ke transaksi
+        transaksi_data[pembeli_id]['items'].append({
+            "id_obat": obat_id,
+            "nama": obat_db[obat_id]['nama'],
+            "jumlah": jumlah,
+            "subtotal": subtotal
+        })
+
+    if total_harga > 0:
+        print(f"\nTotal yang harus dibayar: {total_harga}")
+        uang_dibayar = float(input("Masukkan jumlah uang yang dibayarkan: "))
+        while uang_dibayar < total_harga:
+            print("Uang yang dibayarkan tidak cukup!")
+            uang_dibayar = float(input("Masukkan jumlah uang yang dibayarkan: "))
+
+        kembalian = uang_dibayar - total_harga
+
+        # Simpan total, uang dibayar, dan kembalian ke transaksi
+        transaksi_data[pembeli_id]["total"] = total_harga
+        transaksi_data[pembeli_id]["uang_dibayar"] = uang_dibayar
+        transaksi_data[pembeli_id]["kembalian"] = kembalian
+
+        simpan_file_transaksi(transaksi_data)
+        print(f"Transaksi berhasil! Kembalian: {kembalian}")
+    else:
+        print("Transaksi dibatalkan.")
+
+# Menu untuk admin
+def menu_admin(obat_db):
+    while True:
+        print("\n=== Menu Admin ===")
+        print("1. Tambah Obat")
+        print("2. Tampilkan Obat")
+        print("3. Kembali ke Menu Utama")
+        pilihan = input("Pilih menu: ")
+
+        if pilihan == '1':
+            obat_db = tambah_obat(obat_db)
+        elif pilihan == '2':
+            tampilkan_obat(obat_db)
+        elif pilihan == '3':
+            break
         else:
             print("Pilihan tidak valid!")
 
-# Inisialisasi dan mulai program
-create_tables()
-melayani_pembeli()
+    return obat_db
 
-# Menutup koneksi ke database setelah program selesai
-conn.close()
+# Menu untuk user
+def menu_user(obat_db):
+    while True:
+        print("\n=== Menu User ===")
+        print("1. Lakukan Transaksi")
+        print("2. Kembali ke Menu Utama")
+        pilihan = input("Pilih menu: ")
+
+        if pilihan == '1':
+            transaksi_penjualan(obat_db)
+        elif pilihan == '2':
+            break
+        else:
+            print("Pilihan tidak valid!")
+
+# Menu utama
+def menu():
+    # Database obat (berbasis dictionary)
+    obat_db = {}
+
+    while True:
+        print("\n=== Sistem Penjualan Apotek ===")
+        print("1. Admin")
+        print("2. User")
+        print("3. Keluar")
+        pilihan = input("Pilih menu: ")
+
+        if pilihan == '1':
+            obat_db = menu_admin(obat_db)
+        elif pilihan == '2':
+            menu_user(obat_db)
+        elif pilihan == '3':
+            print("Keluar dari program.")
+            break
+        else:
+            print("Pilihan tidak valid!")
+
+# Menjalankan program
+if __name__ == "__main__":
+    menu()
     
